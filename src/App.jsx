@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Trash2, Download, X, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Search, Plus, Trash2, Download, X, BarChart3, Lightbulb, ChevronRight } from 'lucide-react';
 import { supabase } from './supabase.js';
 
 const ALL_CATEGORIES = [
@@ -15,6 +15,50 @@ const ALL_CATEGORIES = [
   'Australia',
 ];
 
+// 30 hand-curated suggestions based on gaps in the library
+const SUGGESTED_READS = [
+  { title: 'The Power Broker', author: 'Robert A. Caro', why: 'The defining work on how power actually accumulates and operates. The largest missing classic in your library.' },
+  { title: 'Master of the Senate', author: 'Robert A. Caro', why: 'Volume 3 of the LBJ series. Caro at his peak. You inevitably read it after The Power Broker.' },
+  { title: 'Stalingrad', author: 'Antony Beevor', why: 'Beevor\'s masterwork. You have Arnhem but not this — pairs perfectly with Bloodlands.' },
+  { title: 'Berlin: The Downfall 1945', author: 'Antony Beevor', why: 'Completes the Beevor trilogy with Stalingrad and D-Day.' },
+  { title: 'Richer, Wiser, Happier', author: 'William Green', why: 'Interviews with the world\'s great long-term investors. The temperament side of the investing canon you\'re missing.' },
+  { title: 'Thinking, Fast and Slow', author: 'Daniel Kahneman', why: 'You have Tetlock and Mauboussin but not Kahneman — that\'s the foundation text.' },
+  { title: 'Common Stocks and Uncommon Profits', author: 'Philip Fisher', why: 'The Rosetta Stone for quality-growth investing. Buffett cites it constantly.' },
+  { title: 'The Joys of Compounding', author: 'Gautam Baid', why: 'Munger-influenced mental models, written by a practitioner. Slots next to Almanack.' },
+  { title: 'Master and Commander', author: 'Patrick O\'Brian', why: 'Your gateway drug to a 20-novel obsession. Given your taste for age-of-sail material (Nelson, Endurance), this is overdue.' },
+  { title: 'The Looming Tower', author: 'Lawrence Wright', why: 'The definitive 9/11 origin story. Sits naturally between Empire of Pain and An Impeccable Spy.' },
+  { title: 'In the Heart of the Sea', author: 'Nathaniel Philbrick', why: 'The whaleship Essex disaster. Endurance-adjacent narrative non-fiction, beautifully done.' },
+  { title: 'The Beginning of Infinity', author: 'David Deutsch', why: 'Audacious work on knowledge and explanation. Sits in the Pinker/Harari/Dawkins shelf but more ambitious.' },
+  { title: 'Seeing Like a State', author: 'James C. Scott', why: 'Why grand top-down schemes fail. Quietly one of the most important books for any investor.' },
+  { title: 'The Hard Thing About Hard Things', author: 'Ben Horowitz', why: 'CEO operating wisdom from someone who lived it. Fills the operator gap between your investing books.' },
+  { title: 'Skin in the Game', author: 'Nassim Nicholas Taleb', why: 'You have Antifragile, Black Swan, Fooled by Randomness — completes the Incerto.' },
+  { title: 'Wanting', author: 'Luke Burgis', why: 'Girardian mimetic desire applied to modern life. Quietly explanatory of markets and careers.' },
+  { title: 'Tomorrow, and Tomorrow, and Tomorrow', author: 'Gabrielle Zevin', why: 'Recent fiction worth the hype. Friendship, creativity, video games — better than that sounds.' },
+  { title: 'James', author: 'Percival Everett', why: '2024 Pulitzer winner. Huckleberry Finn retold from Jim\'s perspective. Genuinely brilliant.' },
+  { title: 'The Bullet That Missed', author: 'Richard Osman', why: 'Light reading that\'s actually good. Counterweight to your heavy military history shelf.' },
+  { title: 'Empire of the Summer Moon', author: 'S.C. Gwynne', why: 'Comanche history done with literary craft. Sits between Bury My Heart and Blood and Thunder.' },
+  { title: 'The Splendid and the Vile', author: 'Erik Larson', why: 'Larson on Churchill during the Blitz. You have Devil in the White City — this is arguably better.' },
+  { title: 'Number Go Up', author: 'Zeke Faux', why: 'Crypto fraud reporting in the Carreyrou/McCrum tradition. Best business book of 2023.' },
+  { title: 'Lessons from the Edge', author: 'Marie Yovanovitch', why: 'Diplomat\'s memoir from inside the Trump-Ukraine fight. Sits next to Impeccable Spy.' },
+  { title: 'The Anxious Generation', author: 'Jonathan Haidt', why: 'The smartphone/teen mental health argument. Whatever you think of it, it\'s the discourse-shaping book of the moment.' },
+  { title: 'Determined', author: 'Robert Sapolsky', why: 'You have Behave. This is Sapolsky\'s argument against free will. Pugnacious follow-up.' },
+  { title: 'Material World', author: 'Ed Conway', why: 'The six raw materials underlying modern civilisation. Investor-brain catnip.' },
+  { title: 'Going Infinite', author: 'Michael Lewis', why: 'Lewis on SBF. You have Boomerang — pick this up.' },
+  { title: 'King: A Life', author: 'Jonathan Eig', why: '2023 biography of MLK. Definitive and superbly researched. Pairs with Chernow\'s Grant.' },
+  { title: 'Working', author: 'Robert A. Caro', why: 'Caro on Caro — short memoir about how he researches and writes. Worth it on its own.' },
+  { title: 'The Coming Wave', author: 'Mustafa Suleyman', why: 'DeepMind co-founder on AI and biotech. Required reading for anyone investing through this decade.' },
+];
+
+// Debounce hook
+function useDebounced(value, ms) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
+}
+
 export default function App() {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +69,17 @@ export default function App() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [newBook, setNewBook] = useState({ title: '', author: '', category: 'Business & Investing' });
   const [error, setError] = useState(null);
+
+  // Suggested reads carousel state
+  const [suggestionIdx, setSuggestionIdx] = useState(() => Math.floor(Math.random() * SUGGESTED_READS.length));
+  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debouncedTitle = useDebounced(newBook.title, 350);
+  const lastSelectedTitle = useRef('');
 
   useEffect(() => {
     (async () => {
@@ -43,6 +98,57 @@ export default function App() {
     })();
   }, []);
 
+  // Auto-rotate suggested reads every 8s
+  useEffect(() => {
+    if (suggestionsHidden) return;
+    const interval = setInterval(() => {
+      setSuggestionIdx((i) => (i + 1) % SUGGESTED_READS.length);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [suggestionsHidden]);
+
+  // Open Library autocomplete
+  useEffect(() => {
+    const q = debouncedTitle.trim();
+    if (q.length < 3 || q === lastSelectedTitle.current) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=5&fields=title,author_name,first_publish_year`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const results = (data?.docs || [])
+          .filter((d) => d.title && d.author_name && d.author_name.length > 0)
+          .slice(0, 5)
+          .map((d) => ({
+            title: d.title,
+            author: d.author_name[0],
+            year: d.first_publish_year,
+          }));
+        setSuggestions(results);
+        setShowSuggestions(true);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSuggestionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedTitle]);
+
+  const selectSuggestion = (s) => {
+    lastSelectedTitle.current = s.title;
+    setNewBook({ ...newBook, title: s.title, author: s.author });
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
   const addBook = async () => {
     if (!newBook.title.trim() || !newBook.author.trim()) return;
     try {
@@ -60,10 +166,21 @@ export default function App() {
       if (insertErr) throw insertErr;
       setBooks([data, ...books]);
       setNewBook({ title: '', author: '', category: newBook.category });
+      setSuggestions([]);
+      setShowSuggestions(false);
+      lastSelectedTitle.current = '';
       setShowAddModal(false);
     } catch (e) {
       setError('Failed to add book: ' + (e?.message || ''));
     }
+  };
+
+  const openAddModal = () => {
+    setNewBook({ title: '', author: '', category: 'Business & Investing' });
+    setSuggestions([]);
+    setShowSuggestions(false);
+    lastSelectedTitle.current = '';
+    setShowAddModal(true);
   };
 
   const deleteBook = async (id) => {
@@ -140,6 +257,7 @@ export default function App() {
   }, [books]);
 
   const totalCount = books.length;
+  const currentSuggestion = SUGGESTED_READS[suggestionIdx];
 
   if (loading) {
     return (
@@ -160,6 +278,9 @@ export default function App() {
         .pill:hover { transform: translateY(-1px); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.25s ease-out; }
+        @keyframes suggestionIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+        .suggestion-in { animation: suggestionIn 0.35s ease-out; }
+        .suggestion-card { background: linear-gradient(180deg, #efe4cd 0%, #ebe0cb 100%); }
       `}</style>
 
       <header className="border-b-2" style={{ borderColor: '#4a3825', background: '#ebe0cb' }}>
@@ -185,6 +306,51 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {!suggestionsHidden && (
+        <div className="max-w-6xl mx-auto px-6 pt-5">
+          <div
+            key={suggestionIdx}
+            className="suggestion-in suggestion-card border rounded-sm p-4 md:p-5 flex items-start gap-4"
+            style={{ borderColor: 'rgba(74, 56, 37, 0.25)' }}
+          >
+            <div className="flex-shrink-0 mt-0.5">
+              <Lightbulb className="w-5 h-5" style={{ color: '#8b3a2b' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="mono-font text-[10px] uppercase tracking-widest text-stone-600 mb-1">
+                Recommended for your shelf
+              </div>
+              <div className="display-font text-xl md:text-2xl font-bold text-stone-900 leading-tight">
+                {currentSuggestion.title}
+              </div>
+              <div className="italic text-stone-700 mb-2">{currentSuggestion.author}</div>
+              <div className="text-sm text-stone-700 leading-snug">{currentSuggestion.why}</div>
+            </div>
+            <div className="flex-shrink-0 flex flex-col items-end gap-2">
+              <button
+                onClick={() => setSuggestionsHidden(true)}
+                className="text-stone-400 hover:text-stone-700 p-1"
+                aria-label="Hide suggestions"
+                title="Hide suggestions"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setSuggestionIdx((i) => (i + 1) % SUGGESTED_READS.length)}
+                className="mono-font text-[10px] uppercase tracking-widest text-stone-700 hover:text-stone-900 flex items-center gap-1 py-1 px-2 border rounded-sm hover:bg-stone-100"
+                style={{ borderColor: 'rgba(74, 56, 37, 0.25)', background: 'rgba(255,255,255,0.4)' }}
+              >
+                Next
+                <ChevronRight className="w-3 h-3" />
+              </button>
+              <div className="mono-font text-[9px] text-stone-500">
+                {suggestionIdx + 1} / {SUGGESTED_READS.length}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="sticky top-0 z-20 border-b" style={{ background: '#f4ede0', borderColor: 'rgba(74, 56, 37, 0.2)' }}>
         <div className="max-w-6xl mx-auto px-6 py-4">
@@ -230,7 +396,7 @@ export default function App() {
                 Export
               </button>
               <button
-                onClick={() => setShowAddModal(true)}
+                onClick={openAddModal}
                 className="mono-font text-xs uppercase tracking-widest py-2.5 px-4 rounded-sm text-amber-50 hover:opacity-90 flex items-center gap-2"
                 style={{ background: '#2a1f14' }}
               >
@@ -328,16 +494,49 @@ export default function App() {
       {showAddModal && (
         <Modal onClose={() => setShowAddModal(false)} title="Add a Book">
           <div className="space-y-4">
-            <Field label="Title">
-              <input
-                type="text"
-                value={newBook.title}
-                onChange={(e) => setNewBook({ ...newBook, title: e.target.value })}
-                className="w-full px-3 py-2 bg-white border rounded-sm focus:outline-none focus:ring-2 focus:ring-stone-700"
-                style={{ borderColor: 'rgba(74, 56, 37, 0.25)', fontFamily: "'EB Garamond', serif", fontSize: '17px' }}
-                autoFocus
-              />
-            </Field>
+            <div className="relative">
+              <Field label="Title">
+                <input
+                  type="text"
+                  value={newBook.title}
+                  onChange={(e) => {
+                    setNewBook({ ...newBook, title: e.target.value });
+                    lastSelectedTitle.current = '';
+                  }}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  className="w-full px-3 py-2 bg-white border rounded-sm focus:outline-none focus:ring-2 focus:ring-stone-700"
+                  style={{ borderColor: 'rgba(74, 56, 37, 0.25)', fontFamily: "'EB Garamond', serif", fontSize: '17px' }}
+                  autoFocus
+                  autoComplete="off"
+                />
+              </Field>
+              {showSuggestions && suggestions.length > 0 && (
+                <div
+                  className="absolute z-10 mt-1 w-full bg-white border rounded-sm shadow-lg max-h-72 overflow-auto"
+                  style={{ borderColor: 'rgba(74, 56, 37, 0.25)' }}
+                >
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => selectSuggestion(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-stone-100 border-b last:border-b-0 transition-colors"
+                      style={{ borderColor: 'rgba(74, 56, 37, 0.1)' }}
+                    >
+                      <div className="font-semibold text-stone-900 leading-snug">{s.title}</div>
+                      <div className="text-sm italic text-stone-600">
+                        {s.author}
+                        {s.year && <span className="mono-font text-xs text-stone-500 not-italic ml-2">({s.year})</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {suggestionsLoading && (
+                <div className="mono-font text-[10px] uppercase tracking-widest text-stone-400 mt-1 italic">
+                  searching…
+                </div>
+              )}
+            </div>
             <Field label="Author">
               <input
                 type="text"
@@ -345,6 +544,7 @@ export default function App() {
                 onChange={(e) => setNewBook({ ...newBook, author: e.target.value })}
                 className="w-full px-3 py-2 bg-white border rounded-sm focus:outline-none focus:ring-2 focus:ring-stone-700"
                 style={{ borderColor: 'rgba(74, 56, 37, 0.25)', fontFamily: "'EB Garamond', serif", fontSize: '17px' }}
+                autoComplete="off"
               />
             </Field>
             <Field label="Category">
