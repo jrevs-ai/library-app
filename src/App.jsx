@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Search, Plus, Trash2, Download, X, BarChart3, Lightbulb, ChevronRight } from 'lucide-react';
+import { Search, Plus, Trash2, Download, X, BarChart3, Lightbulb, ChevronRight, ChevronLeft } from 'lucide-react';
 import { supabase } from './supabase.js';
 
 const ALL_CATEGORIES = [
@@ -19,10 +19,10 @@ const ALL_CATEGORIES = [
 const SUGGESTED_READS = [
   { title: 'The Power Broker', author: 'Robert A. Caro', why: 'The defining work on how power actually accumulates and operates. The largest missing classic in your library.' },
   { title: 'Master of the Senate', author: 'Robert A. Caro', why: 'Volume 3 of the LBJ series. Caro at his peak. You inevitably read it after The Power Broker.' },
-  { title: 'Stalingrad', author: 'Antony Beevor', why: 'Beevor\'s masterwork. You have Arnhem but not this — pairs perfectly with Bloodlands.' },
-  { title: 'Berlin: The Downfall 1945', author: 'Antony Beevor', why: 'Completes the Beevor trilogy with Stalingrad and D-Day.' },
-  { title: 'Richer, Wiser, Happier', author: 'William Green', why: 'Interviews with the world\'s great long-term investors. The temperament side of the investing canon you\'re missing.' },
-  { title: 'Thinking, Fast and Slow', author: 'Daniel Kahneman', why: 'You have Tetlock and Mauboussin but not Kahneman — that\'s the foundation text.' },
+  { title: 'Berlin: The Downfall 1945', author: 'Antony Beevor', why: 'Completes the Beevor trilogy with Stalingrad and D-Day. You\'ve done the front-end, now finish it.' },
+  { title: 'D-Day: The Battle for Normandy', author: 'Antony Beevor', why: 'The third Beevor in the WWII trilogy. Operational detail with a novelist\'s eye for character.' },
+  { title: 'The Snowball', author: 'Alice Schroeder', why: 'The definitive Buffett biography. 800 pages but flies by. Investing wisdom embedded in life narrative.' },
+  { title: 'Mastering the Market Cycle', author: 'Howard Marks', why: 'You have The Most Important Thing — this is the deeper dive on Marks\'s cycle framework.' },
   { title: 'Common Stocks and Uncommon Profits', author: 'Philip Fisher', why: 'The Rosetta Stone for quality-growth investing. Buffett cites it constantly.' },
   { title: 'The Joys of Compounding', author: 'Gautam Baid', why: 'Munger-influenced mental models, written by a practitioner. Slots next to Almanack.' },
   { title: 'Master and Commander', author: 'Patrick O\'Brian', why: 'Your gateway drug to a 20-novel obsession. Given your taste for age-of-sail material (Nelson, Endurance), this is overdue.' },
@@ -73,6 +73,8 @@ export default function App() {
   // Suggested reads carousel state
   const [suggestionIdx, setSuggestionIdx] = useState(() => Math.floor(Math.random() * SUGGESTED_READS.length));
   const [suggestionsHidden, setSuggestionsHidden] = useState(false);
+  const [suggestionsHovered, setSuggestionsHovered] = useState(false);
+  const [slideDirection, setSlideDirection] = useState('right');
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState([]);
@@ -98,14 +100,23 @@ export default function App() {
     })();
   }, []);
 
-  // Auto-rotate suggested reads every 8s
+  // Auto-rotate suggested reads every 8s (pauses on hover)
   useEffect(() => {
-    if (suggestionsHidden) return;
+    if (suggestionsHidden || suggestionsHovered) return;
     const interval = setInterval(() => {
+      setSlideDirection('right');
       setSuggestionIdx((i) => (i + 1) % SUGGESTED_READS.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, [suggestionsHidden]);
+  }, [suggestionsHidden, suggestionsHovered]);
+
+  const goToSuggestion = (newIdx) => {
+    setSlideDirection(newIdx > suggestionIdx || (suggestionIdx === SUGGESTED_READS.length - 1 && newIdx === 0) ? 'right' : 'left');
+    setSuggestionIdx(newIdx);
+  };
+
+  const nextSuggestion = () => goToSuggestion((suggestionIdx + 1) % SUGGESTED_READS.length);
+  const prevSuggestion = () => goToSuggestion((suggestionIdx - 1 + SUGGESTED_READS.length) % SUGGESTED_READS.length);
 
   // Open Library autocomplete
   useEffect(() => {
@@ -278,9 +289,25 @@ export default function App() {
         .pill:hover { transform: translateY(-1px); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .fade-in { animation: fadeIn 0.25s ease-out; }
-        @keyframes suggestionIn { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
-        .suggestion-in { animation: suggestionIn 0.35s ease-out; }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        .slide-in-right { animation: slideInRight 0.35s ease-out; }
+        .slide-in-left { animation: slideInLeft 0.35s ease-out; }
         .suggestion-card { background: linear-gradient(180deg, #efe4cd 0%, #ebe0cb 100%); }
+        .nav-btn { 
+          transition: all 0.15s ease;
+        }
+        .nav-btn:hover { 
+          background: #2a1f14 !important; 
+          color: #f4ede0 !important; 
+          border-color: #2a1f14 !important;
+        }
+        .nav-btn:hover svg { color: #f4ede0 !important; }
+        .dot { 
+          transition: all 0.2s ease;
+          cursor: pointer;
+        }
+        .dot:hover { transform: scale(1.4); }
       `}</style>
 
       <header className="border-b-2" style={{ borderColor: '#4a3825', background: '#ebe0cb' }}>
@@ -310,43 +337,82 @@ export default function App() {
       {!suggestionsHidden && (
         <div className="max-w-6xl mx-auto px-6 pt-5">
           <div
-            key={suggestionIdx}
-            className="suggestion-in suggestion-card border rounded-sm p-4 md:p-5 flex items-start gap-4"
+            className="suggestion-card border rounded-sm relative"
             style={{ borderColor: 'rgba(74, 56, 37, 0.25)' }}
+            onMouseEnter={() => setSuggestionsHovered(true)}
+            onMouseLeave={() => setSuggestionsHovered(false)}
           >
-            <div className="flex-shrink-0 mt-0.5">
-              <Lightbulb className="w-5 h-5" style={{ color: '#8b3a2b' }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="mono-font text-[10px] uppercase tracking-widest text-stone-600 mb-1">
-                Recommended for your shelf
-              </div>
-              <div className="display-font text-xl md:text-2xl font-bold text-stone-900 leading-tight">
-                {currentSuggestion.title}
-              </div>
-              <div className="italic text-stone-700 mb-2">{currentSuggestion.author}</div>
-              <div className="text-sm text-stone-700 leading-snug">{currentSuggestion.why}</div>
-            </div>
-            <div className="flex-shrink-0 flex flex-col items-end gap-2">
+            {/* Dismiss button */}
+            <button
+              onClick={() => setSuggestionsHidden(true)}
+              className="absolute top-2 right-2 z-10 text-stone-400 hover:text-stone-700 p-1.5 rounded-sm hover:bg-stone-100/50"
+              aria-label="Hide suggestions"
+              title="Hide suggestions"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Main content row */}
+            <div className="flex items-stretch">
+              {/* Previous button */}
               <button
-                onClick={() => setSuggestionsHidden(true)}
-                className="text-stone-400 hover:text-stone-700 p-1"
-                aria-label="Hide suggestions"
-                title="Hide suggestions"
+                onClick={prevSuggestion}
+                className="nav-btn flex-shrink-0 flex items-center justify-center w-10 md:w-12 border-r"
+                style={{ borderColor: 'rgba(74, 56, 37, 0.15)', background: 'rgba(255,255,255,0.2)' }}
+                aria-label="Previous suggestion"
               >
-                <X className="w-4 h-4" />
+                <ChevronLeft className="w-5 h-5 text-stone-600" />
               </button>
-              <button
-                onClick={() => setSuggestionIdx((i) => (i + 1) % SUGGESTED_READS.length)}
-                className="mono-font text-[10px] uppercase tracking-widest text-stone-700 hover:text-stone-900 flex items-center gap-1 py-1 px-2 border rounded-sm hover:bg-stone-100"
-                style={{ borderColor: 'rgba(74, 56, 37, 0.25)', background: 'rgba(255,255,255,0.4)' }}
-              >
-                Next
-                <ChevronRight className="w-3 h-3" />
-              </button>
-              <div className="mono-font text-[9px] text-stone-500">
-                {suggestionIdx + 1} / {SUGGESTED_READS.length}
+
+              {/* Suggestion content */}
+              <div className="flex-1 min-w-0 px-4 md:px-6 py-5 pr-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lightbulb className="w-4 h-4 flex-shrink-0" style={{ color: '#8b3a2b' }} />
+                  <div className="mono-font text-[10px] uppercase tracking-widest text-stone-600">
+                    Recommended for your shelf
+                  </div>
+                </div>
+                <div
+                  key={suggestionIdx}
+                  className={slideDirection === 'right' ? 'slide-in-right' : 'slide-in-left'}
+                >
+                  <div className="display-font text-xl md:text-2xl font-bold text-stone-900 leading-tight">
+                    {currentSuggestion.title}
+                  </div>
+                  <div className="italic text-stone-700 mb-2">{currentSuggestion.author}</div>
+                  <div className="text-sm text-stone-700 leading-snug">{currentSuggestion.why}</div>
+                </div>
               </div>
+
+              {/* Next button */}
+              <button
+                onClick={nextSuggestion}
+                className="nav-btn flex-shrink-0 flex items-center justify-center w-10 md:w-12 border-l"
+                style={{ borderColor: 'rgba(74, 56, 37, 0.15)', background: 'rgba(255,255,255,0.2)' }}
+                aria-label="Next suggestion"
+              >
+                <ChevronRight className="w-5 h-5 text-stone-600" />
+              </button>
+            </div>
+
+            {/* Dot indicators */}
+            <div className="flex items-center justify-center gap-1.5 pb-3 pt-1">
+              {SUGGESTED_READS.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => goToSuggestion(i)}
+                  className="dot"
+                  aria-label={`Go to suggestion ${i + 1}`}
+                  style={{
+                    width: i === suggestionIdx ? '20px' : '6px',
+                    height: '6px',
+                    borderRadius: '3px',
+                    background: i === suggestionIdx ? '#8b3a2b' : 'rgba(74, 56, 37, 0.25)',
+                    border: 'none',
+                    padding: 0,
+                  }}
+                />
+              ))}
             </div>
           </div>
         </div>
