@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Trash2, Download, X, BarChart3, LogIn, LogOut } from 'lucide-react';
+import { Search, Plus, Trash2, Download, X, BarChart3 } from 'lucide-react';
 import { supabase } from './supabase.js';
 
 const ALL_CATEGORIES = [
@@ -23,23 +23,9 @@ export default function App() {
   const [sortBy, setSortBy] = useState('title');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [newBook, setNewBook] = useState({ title: '', author: '', category: 'Business & Investing' });
   const [error, setError] = useState(null);
-  const [session, setSession] = useState(null);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginSent, setLoginSent] = useState(false);
 
-  // Track session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Load all books from Supabase
   useEffect(() => {
     (async () => {
       try {
@@ -56,27 +42,6 @@ export default function App() {
       }
     })();
   }, []);
-
-  const isAuthed = !!session;
-
-  const sendLoginLink = async () => {
-    if (!loginEmail.trim()) return;
-    try {
-      const { error: authErr } = await supabase.auth.signInWithOtp({
-        email: loginEmail.trim(),
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (authErr) throw authErr;
-      setLoginSent(true);
-    } catch (e) {
-      setError('Sign-in failed: ' + (e?.message || ''));
-    }
-  };
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-  };
 
   const addBook = async () => {
     if (!newBook.title.trim() || !newBook.author.trim()) return;
@@ -197,7 +162,6 @@ export default function App() {
         .fade-in { animation: fadeIn 0.25s ease-out; }
       `}</style>
 
-      {/* Masthead */}
       <header className="border-b-2" style={{ borderColor: '#4a3825', background: '#ebe0cb' }}>
         <div className="max-w-6xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
@@ -212,37 +176,16 @@ export default function App() {
                 A catalogue of {totalCount} books
               </div>
             </div>
-            <div className="hidden md:flex flex-col items-end gap-2">
-              <div>
-                <div className="mono-font text-xs uppercase tracking-widest text-stone-500 text-right">No.</div>
-                <div className="display-font text-6xl font-black" style={{ color: '#8b3a2b' }}>
-                  {String(totalCount).padStart(3, '0')}
-                </div>
+            <div className="hidden md:block text-right">
+              <div className="mono-font text-xs uppercase tracking-widest text-stone-500">No.</div>
+              <div className="display-font text-6xl font-black" style={{ color: '#8b3a2b' }}>
+                {String(totalCount).padStart(3, '0')}
               </div>
-              {isAuthed ? (
-                <button
-                  onClick={signOut}
-                  className="mono-font text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 flex items-center gap-1.5"
-                  title={session?.user?.email}
-                >
-                  <LogOut className="w-3 h-3" />
-                  Sign out
-                </button>
-              ) : (
-                <button
-                  onClick={() => { setShowLoginModal(true); setLoginSent(false); }}
-                  className="mono-font text-[10px] uppercase tracking-widest text-stone-600 hover:text-stone-900 flex items-center gap-1.5"
-                >
-                  <LogIn className="w-3 h-3" />
-                  Sign in
-                </button>
-              )}
             </div>
           </div>
         </div>
       </header>
 
-      {/* Controls bar */}
       <div className="sticky top-0 z-20 border-b" style={{ background: '#f4ede0', borderColor: 'rgba(74, 56, 37, 0.2)' }}>
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
@@ -286,16 +229,14 @@ export default function App() {
                 <Download className="w-3.5 h-3.5" />
                 Export
               </button>
-              {isAuthed && (
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="mono-font text-xs uppercase tracking-widest py-2.5 px-4 rounded-sm text-amber-50 hover:opacity-90 flex items-center gap-2"
-                  style={{ background: '#2a1f14' }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Book
-                </button>
-              )}
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="mono-font text-xs uppercase tracking-widest py-2.5 px-4 rounded-sm text-amber-50 hover:opacity-90 flex items-center gap-2"
+                style={{ background: '#2a1f14' }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Book
+              </button>
             </div>
           </div>
 
@@ -360,17 +301,15 @@ export default function App() {
                     </span>
                   </div>
                 </div>
-                {isAuthed && (
-                  <button
-                    onClick={() => {
-                      if (confirm(`Remove "${book.title}" from the library?`)) deleteBook(book.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-stone-400 hover:text-red-700"
-                    aria-label="Remove book"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    if (confirm(`Remove "${book.title}" from the library?`)) deleteBook(book.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-stone-400 hover:text-red-700"
+                  aria-label="Remove book"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
@@ -493,55 +432,6 @@ export default function App() {
               </span>
             </div>
           </div>
-        </Modal>
-      )}
-
-      {showLoginModal && (
-        <Modal onClose={() => { setShowLoginModal(false); setLoginSent(false); setLoginEmail(''); }} title="Sign In">
-          {loginSent ? (
-            <div className="space-y-3">
-              <p className="text-stone-800">
-                Check your inbox at <span className="italic">{loginEmail}</span>. We've sent a one-time sign-in link.
-              </p>
-              <p className="text-sm text-stone-600 italic">
-                You can close this window — once you click the link in your email, you'll be signed in here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-stone-700 text-sm italic">
-                Sign-in is for the librarian only. Public visitors can browse freely without signing in.
-              </p>
-              <Field label="Email">
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border rounded-sm focus:outline-none focus:ring-2 focus:ring-stone-700"
-                  style={{ borderColor: 'rgba(74, 56, 37, 0.25)', fontFamily: "'EB Garamond', serif", fontSize: '17px' }}
-                  autoFocus
-                  onKeyDown={(e) => { if (e.key === 'Enter') sendLoginLink(); }}
-                />
-              </Field>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  onClick={() => { setShowLoginModal(false); setLoginEmail(''); }}
-                  className="mono-font text-xs uppercase tracking-widest py-2 px-4 border rounded-sm text-stone-700 hover:bg-stone-100"
-                  style={{ borderColor: 'rgba(74, 56, 37, 0.25)' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={sendLoginLink}
-                  disabled={!loginEmail.trim()}
-                  className="mono-font text-xs uppercase tracking-widest py-2 px-4 rounded-sm text-amber-50 hover:opacity-90 disabled:opacity-40"
-                  style={{ background: '#2a1f14' }}
-                >
-                  Send Magic Link
-                </button>
-              </div>
-            </div>
-          )}
         </Modal>
       )}
     </div>
